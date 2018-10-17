@@ -1197,12 +1197,16 @@ function manageMenu() {
 	esac
 }
 
-# Check for root, TUN, OS...
-initialCheck
+function main() {
+	# Check for root, TUN, OS...
+	initialCheck
 
-# Check if OpenVPN is already installed
-if [[ -e /etc/openvpn/server.conf ]]; then
-	manageMenu
-else
-	installOpenVPN
-fi
+	# Check if OpenVPN is already installed
+	if [[ -f /etc/openvpn/server.conf ]] || [[ -f /etc/openvpn/client.conf ]]; then
+		manageMenu
+	else
+		installOpenVPN
+	fi
+}
+
+main "$@"

@@ -37,7 +37,7 @@ function checkOS() {
 			fi
 		elif [[ "$ID" == "ubuntu" ]]; then
 			OS="ubuntu"
-			if [[ ! $VERSION_ID =~ (16.04|18.04) ]]; then
+			if [[ ! $VERSION_ID =~ (16.04|18.04|19.04) ]]; then
 				echo "⚠️ Your version of Ubuntu is not supported."
 				echo ""
 				echo "However, if you're using Ubuntu > 17 or beta, then you can continue."
@@ -199,14 +199,17 @@ function installQuestions() {
 
 	# Detect public IPv4 address and pre-fill for the user
 	IP=$(ip addr | grep 'inet' | grep -v inet6 | grep -vE '127\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}' | grep -oE '[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}' | head -1)
-	read -rp "IP address: " -e -i "$IP" IP
+	APPROVE_IP=${APPROVE_IP:-n}
+	if [[ $APPROVE_IP =~ n ]]; then
+		read -rp "IP address: " -e -i "$IP" IP
+	fi
 	# If $IP is a private IP address, the server must be behind NAT
 	if echo "$IP" | grep -qE '^(10\.|172\.1[6789]\.|172\.2[0-9]\.|172\.3[01]\.|192\.168)'; then
 		echo ""
 		echo "It seems this server is behind NAT. What is its public IPv4 address or hostname?"
 		echo "We need it for the clients to connect to the server."
-		until [[ "$PUBLICIP" != "" ]]; do
-			read -rp "Public IPv4 address or hostname: " -e PUBLICIP
+		until [[ "$ENDPOINT" != "" ]]; do
+			read -rp "Public IPv4 address or hostname: " -e ENDPOINT
 		done
 	fi
 
@@ -548,11 +551,33 @@ function installQuestions() {
 	echo ""
 	echo "Okay, that was all I needed. We are ready to setup your OpenVPN server now."
 	echo "You will be able to generate a client at the end of the installation."
-	read -n1 -r -p "Press any key to continue..."
+	APPROVE_INSTALL=${APPROVE_INSTALL:-n}
+	if [[ $APPROVE_INSTALL =~ n ]]; then
+		read -n1 -r -p "Press any key to continue..."
+	fi
 }
 
-function installOpenVPN() {
-	# Run setup questions first
+function installOpenVPN () {
+	if [[ $AUTO_INSTALL == "y" ]]; then
+		# Set default choices so that no questions will be asked.
+		APPROVE_INSTALL=${APPROVE_INSTALL:-y}
+		APPROVE_IP=${APPROVE_IP:-y}
+		IPV6_SUPPORT=${IPV6_SUPPORT:-n}
+		PORT_CHOICE=${PORT_CHOICE:-1}
+		PROTOCOL_CHOICE=${PROTOCOL_CHOICE:-1}
+		DNS=${DNS:-1}
+		COMPRESSION_ENABLED=${COMPRESSION_ENABLED:-n}
+		CUSTOMIZE_ENC=${CUSTOMIZE_ENC:-n}
+		CLIENT=${CLIENT:-client}
+		PASS=${PASS:-1}
+		CONTINUE=${CONTINUE:-y}
+
+		# Behind NAT, we'll default to the publicly reachable IPv4.
+		PUBLIC_IPV4=$(curl ifconfig.co)
+		ENDPOINT=${ENDPOINT:-$PUBLIC_IPV4}
+	fi
+
+	# Run setup questions first, and set other variales if auto-install
 	installQuestions
 
 	# Get the "public" interface from the default route
@@ -567,8 +592,8 @@ function installOpenVPN() {
 			wget -O - https://swupdate.openvpn.net/repos/repo-public.gpg | apt-key add -
 			apt-get update
 		fi
-		if [[ "$VERSION_ID" == "16.04" ]]; then
-			echo "deb http://build.openvpn.net/debian/openvpn/stable trusty main" >/etc/apt/sources.list.d/openvpn.list
+		if [[ "$VERSION_ID" = "16.04" ]]; then
+			echo "deb http://build.openvpn.net/debian/openvpn/stable xenial main" > /etc/apt/sources.list.d/openvpn.list
 			wget -O - https://swupdate.openvpn.net/repos/repo-public.gpg | apt-key add -
 			apt-get update
 		fi
@@ -579,22 +604,7 @@ function installOpenVPN() {
 		yum install -y openvpn iptables openssl wget ca-certificates curl
 	elif [[ "$OS" == 'fedora' ]]; then
 		dnf install -y openvpn iptables openssl wget ca-certificates curl
-	elif [[ "$OS" == 'arch' ]]; then
-		echo ""
-		echo "WARNING: As you're using ArchLinux, I need to update the packages on your system to install those I need."
-		echo "Not doing that could cause problems between dependencies, or missing files in repositories (Arch Linux does not support partial upgrades)."
-		echo ""
-		echo "Continuing will update your installed packages and install needed ones."
-		echo ""
-		unset CONTINUE
-		until [[ $CONTINUE =~ (y|n) ]]; do
-			read -rp "Continue? [y/n]: " -e -iy CONTINUE
-		done
-		if [[ "$CONTINUE" == "n" ]]; then
-			echo "Exiting because user did not permit updating the system."
-			exit 4
-		fi
-
+	elif [[ "$OS" = 'arch' ]]; then
 		# Install required dependencies and upgrade the system
 		pacman --needed --noconfirm -Syu openvpn iptables openssl wget ca-certificates curl
 	fi
@@ -612,13 +622,12 @@ function installOpenVPN() {
 	fi
 
 	# Install the latest version of easy-rsa from source
-	local version="3.0.5"
-	wget -O ~/EasyRSA-nix-${version}.tgz https://github.com/OpenVPN/easy-rsa/releases/download/v${version}/EasyRSA-nix-${version}.tgz
-	tar xzf ~/EasyRSA-nix-${version}.tgz -C ~/
-	mv ~/EasyRSA-${version}/ /etc/openvpn/
-	mv /etc/openvpn/EasyRSA-${version}/ /etc/openvpn/easy-rsa/
+	local version="3.0.6"
+	wget -O ~/EasyRSA-unix-v${version}.tgz https://github.com/OpenVPN/easy-rsa/releases/download/v${version}/EasyRSA-unix-v${version}.tgz
+	tar xzf ~/EasyRSA-unix-v${version}.tgz -C ~/
+	mv ~/EasyRSA-v${version} /etc/openvpn/easy-rsa
 	chown -R root:root /etc/openvpn/easy-rsa/
-	rm -f ~/EasyRSA-nix-${version}.tgz
+	rm -f ~/EasyRSA-unix-v${version}.tgz
 
 	cd /etc/openvpn/easy-rsa/ || exit
 	case $CERT_TYPE in
@@ -740,7 +749,7 @@ ifconfig-pool-persist ipp.txt" >>/etc/openvpn/server.conf
 		echo 'push "dhcp-option DNS 176.103.130.131"' >>/etc/openvpn/server.conf
 		;;
 	esac
-	echo 'push "redirect-gateway def1 bypass-dhcp" ' >>/etc/openvpn/server.conf
+	echo 'push "redirect-gateway def1 bypass-dhcp"' >> /etc/openvpn/server.conf
 
 	# IPv6 network settings if needed
 	if [[ "$IPV6_SUPPORT" == 'y' ]]; then
@@ -901,8 +910,8 @@ WantedBy=multi-user.target" >/etc/systemd/system/iptables-openvpn.service
 	systemctl start iptables-openvpn
 
 	# If the server is behind a NAT, use the correct IP address for the clients to connect to
-	if [[ "$PUBLICIP" != "" ]]; then
-		IP=$PUBLICIP
+	if [[ "$ENDPOINT" != "" ]]; then
+		IP=$ENDPOINT
 	fi
 
 	# client-template.txt is created so we have a template to add further users later
@@ -1017,6 +1026,8 @@ function newClient() {
 	echo ""
 	echo "Client $CLIENT added, the configuration file is available at $homeDir/$CLIENT.ovpn."
 	echo "Download the .ovpn file and import it in your OpenVPN client."
+
+	exit 0
 }
 
 function revokeClient() {

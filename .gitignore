@@ -1,1 +1,2 @@
-build-client-auto.sh
+.vagrant/
+*.log

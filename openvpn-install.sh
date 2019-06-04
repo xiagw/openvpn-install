@@ -88,9 +88,8 @@ function initialCheck() {
 	checkOS
 }
 
-unboundConf='/etc/unbound/openvpn.conf'
 function installUnbound() {
-	if [[ ! -e "$unboundConf" ]]; then
+	if [[ ! -e /etc/unbound/unbound.conf ]]; then
 
 		if [[ "$OS" =~ (debian|ubuntu) ]]; then
 			apt-get install -y unbound
@@ -101,27 +100,27 @@ access-control: 10.8.0.1/24 allow
 hide-identity: yes
 hide-version: yes
 use-caps-for-id: yes
-prefetch: yes' >>"$unboundConf"
+prefetch: yes' >>/etc/unbound/unbound.conf
 
 		elif [[ "$OS" == "centos" ]]; then
 			yum install -y unbound
 
 			# Configuration
-			sed -i 's|# interface: 0.0.0.0$|interface: 10.8.0.1|' "$unboundConf"
-			sed -i 's|# access-control: 127.0.0.0/8 allow|access-control: 10.8.0.1/24 allow|' "$unboundConf"
-			sed -i 's|# hide-identity: no|hide-identity: yes|' "$unboundConf"
-			sed -i 's|# hide-version: no|hide-version: yes|' "$unboundConf"
-			sed -i 's|use-caps-for-id: no|use-caps-for-id: yes|' "$unboundConf"
+			sed -i 's|# interface: 0.0.0.0$|interface: 10.8.0.1|' /etc/unbound/unbound.conf
+			sed -i 's|# access-control: 127.0.0.0/8 allow|access-control: 10.8.0.1/24 allow|' /etc/unbound/unbound.conf
+			sed -i 's|# hide-identity: no|hide-identity: yes|' /etc/unbound/unbound.conf
+			sed -i 's|# hide-version: no|hide-version: yes|' /etc/unbound/unbound.conf
+			sed -i 's|use-caps-for-id: no|use-caps-for-id: yes|' /etc/unbound/unbound.conf
 
 		elif [[ "$OS" == "fedora" ]]; then
 			dnf install -y unbound
 
 			# Configuration
-			sed -i 's|# interface: 0.0.0.0$|interface: 10.8.0.1|' "$unboundConf"
-			sed -i 's|# access-control: 127.0.0.0/8 allow|access-control: 10.8.0.1/24 allow|' "$unboundConf"
-			sed -i 's|# hide-identity: no|hide-identity: yes|' "$unboundConf"
-			sed -i 's|# hide-version: no|hide-version: yes|' "$unboundConf"
-			sed -i 's|# use-caps-for-id: no|use-caps-for-id: yes|' "$unboundConf"
+			sed -i 's|# interface: 0.0.0.0$|interface: 10.8.0.1|' /etc/unbound/unbound.conf
+			sed -i 's|# access-control: 127.0.0.0/8 allow|access-control: 10.8.0.1/24 allow|' /etc/unbound/unbound.conf
+			sed -i 's|# hide-identity: no|hide-identity: yes|' /etc/unbound/unbound.conf
+			sed -i 's|# hide-version: no|hide-version: yes|' /etc/unbound/unbound.conf
+			sed -i 's|# use-caps-for-id: no|use-caps-for-id: yes|' /etc/unbound/unbound.conf
 
 		elif [[ "$OS" == "arch" ]]; then
 			pacman -Syu --noconfirm unbound
@@ -129,25 +128,25 @@ prefetch: yes' >>"$unboundConf"
 			# Get root servers list
 			curl -o /etc/unbound/root.hints https://www.internic.net/domain/named.cache
 
-			mv "$unboundConf" "$unboundConf".old
+			mv /etc/unbound/unbound.conf /etc/unbound/unbound.conf.old
 
 			echo 'server:
-use-syslog: yes
-do-daemonize: no
-username: "unbound"
-directory: "/etc/unbound"
-trust-anchor-file: trusted-key.key
-root-hints: root.hints
-interface: 10.8.0.1
-access-control: 10.8.0.1/24 allow
-port: 53
-num-threads: 2
-use-caps-for-id: yes
-harden-glue: yes
-hide-identity: yes
-hide-version: yes
-qname-minimisation: yes
-prefetch: yes' >"$unboundConf"
+	use-syslog: yes
+	do-daemonize: no
+	username: "unbound"
+	directory: "/etc/unbound"
+	trust-anchor-file: trusted-key.key
+	root-hints: root.hints
+	interface: 10.8.0.1
+	access-control: 10.8.0.1/24 allow
+	port: 53
+	num-threads: 2
+	use-caps-for-id: yes
+	harden-glue: yes
+	hide-identity: yes
+	hide-version: yes
+	qname-minimisation: yes
+	prefetch: yes' >/etc/unbound/unbound.conf
 		fi
 
 		if [[ ! "$OS" =~ (fedora|centos) ]]; then
@@ -159,10 +158,10 @@ private-address: 169.254.0.0/16
 private-address: fd00::/8
 private-address: fe80::/10
 private-address: 127.0.0.0/8
-private-address: ::ffff:0:0/96" >>"$unboundConf"
+private-address: ::ffff:0:0/96" >>/etc/unbound/unbound.conf
 		fi
 	else # Unbound is already installed
-		echo 'include: /etc/unbound/openvpn.conf' >>"$unboundConf"
+		echo 'include: /etc/unbound/openvpn.conf' >>/etc/unbound/unbound.conf
 
 		# Add Unbound 'server' for the OpenVPN subnet
 		echo 'server:
@@ -288,11 +287,11 @@ function installQuestions() {
 	echo "   11) AdGuard DNS (Russia)"
 	until [[ "$DNS" =~ ^[0-9]+$ ]] && [ "$DNS" -ge 1 ] && [ "$DNS" -le 11 ]; do
 		read -rp "DNS [1-10]: " -e -i 3 DNS
-		if [[ $DNS == 2 ]] && [[ -e "$unboundConf" ]]; then
+		if [[ $DNS == 2 ]] && [[ -e /etc/unbound/unbound.conf ]]; then
 			echo ""
 			echo "Unbound is already installed."
 			echo "You can allow the script to configure it in order to use it from your OpenVPN clients"
-			echo "We will simply add a second server to $unboundConf for the OpenVPN subnet."
+			echo "We will simply add a second server to /etc/unbound/unbound.conf for the OpenVPN subnet."
 			echo "No changes are made to the current configuration."
 			echo ""
 
@@ -309,7 +308,7 @@ function installQuestions() {
 	echo ""
 	echo "Do you want to use compression? It is not recommended since the VORACLE attack make use of it."
 	until [[ $COMPRESSION_ENABLED =~ (y|n) ]]; do
-		read -rp"Enable compression? [y/n]: " -e -in COMPRESSION_ENABLED
+		read -rp"Enable compression? [y/n]: " -e -i n COMPRESSION_ENABLED
 	done
 	if [[ $COMPRESSION_ENABLED == "y" ]]; then
 		echo "Choose which compression algorithm you want to use:"
@@ -334,7 +333,7 @@ function installQuestions() {
 	echo "See https://github.com/angristan/openvpn-install#security-and-encryption to learn more."
 	echo ""
 	until [[ $CUSTOMIZE_ENC =~ (y|n) ]]; do
-		read -rp "Customize encryption settings? [y/n]: " -e -in CUSTOMIZE_ENC
+		read -rp "Customize encryption settings? [y/n]: " -e -i n CUSTOMIZE_ENC
 	done
 	if [[ $CUSTOMIZE_ENC == "n" ]]; then
 		# Use default, sane and fast parameters
@@ -557,7 +556,7 @@ function installQuestions() {
 	fi
 }
 
-function installOpenVPN () {
+function installOpenVPN() {
 	if [[ $AUTO_INSTALL == "y" ]]; then
 		# Set default choices so that no questions will be asked.
 		APPROVE_INSTALL=${APPROVE_INSTALL:-y}
@@ -592,8 +591,8 @@ function installOpenVPN () {
 			wget -O - https://swupdate.openvpn.net/repos/repo-public.gpg | apt-key add -
 			apt-get update
 		fi
-		if [[ "$VERSION_ID" = "16.04" ]]; then
-			echo "deb http://build.openvpn.net/debian/openvpn/stable xenial main" > /etc/apt/sources.list.d/openvpn.list
+		if [[ "$VERSION_ID" == "16.04" ]]; then
+			echo "deb http://build.openvpn.net/debian/openvpn/stable xenial main" >/etc/apt/sources.list.d/openvpn.list
 			wget -O - https://swupdate.openvpn.net/repos/repo-public.gpg | apt-key add -
 			apt-get update
 		fi
@@ -604,7 +603,7 @@ function installOpenVPN () {
 		yum install -y openvpn iptables openssl wget ca-certificates curl
 	elif [[ "$OS" == 'fedora' ]]; then
 		dnf install -y openvpn iptables openssl wget ca-certificates curl
-	elif [[ "$OS" = 'arch' ]]; then
+	elif [[ "$OS" == 'arch' ]]; then
 		# Install required dependencies and upgrade the system
 		pacman --needed --noconfirm -Syu openvpn iptables openssl wget ca-certificates curl
 	fi
@@ -749,7 +748,7 @@ ifconfig-pool-persist ipp.txt" >>/etc/openvpn/server.conf
 		echo 'push "dhcp-option DNS 176.103.130.131"' >>/etc/openvpn/server.conf
 		;;
 	esac
-	echo 'push "redirect-gateway def1 bypass-dhcp"' >> /etc/openvpn/server.conf
+	echo 'push "redirect-gateway def1 bypass-dhcp"' >>/etc/openvpn/server.conf
 
 	# IPv6 network settings if needed
 	if [[ "$IPV6_SUPPORT" == 'y' ]]; then
@@ -1068,7 +1067,7 @@ function revokeClient() {
 
 function removeUnbound() {
 	# Remove OpenVPN-related config
-	sed -i 's|include: \/etc\/unbound\/openvpn.conf||' "$unboundConf"
+	sed -i 's|include: \/etc\/unbound\/openvpn.conf||' /etc/unbound/unbound.conf
 	rm /etc/unbound/openvpn.conf
 	systemctl restart unbound
 
@@ -1209,16 +1208,12 @@ function manageMenu() {
 	esac
 }
 
-function main() {
-	# Check for root, TUN, OS...
-	initialCheck
+# Check for root, TUN, OS...
+initialCheck
 
-	# Check if OpenVPN is already installed
-	if [[ -f /etc/openvpn/server.conf ]] || [[ -f /etc/openvpn/client.conf ]]; then
-		manageMenu
-	else
-		installOpenVPN
-	fi
-}
-
-main "$@"
+# Check if OpenVPN is already installed
+if [[ -e /etc/openvpn/server.conf ]]; then
+	manageMenu
+else
+	installOpenVPN
+fi

@@ -1196,7 +1196,7 @@ function manageMenu() {
 	echo "   3) Remove OpenVPN"
 	echo "   4) Exit"
 	until [[ "$MENU_OPTION" =~ ^[1-4]$ ]]; do
-		read -rp "Select an option [1-4]: " MENU_OPTION
+		read -rp "Select an option [1-4]: " -e -i4 MENU_OPTION
 	done
 
 	case $MENU_OPTION in

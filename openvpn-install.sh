@@ -947,12 +947,13 @@ verb 3" >>/etc/openvpn/client-template.txt
 }
 
 function newClient() {
+	tail -n +2 /etc/openvpn/easy-rsa/pki/index.txt | grep "^V" | cut -d '=' -f 2 | nl -s ') '
 	echo ""
 	echo "Tell me a name for the client."
 	echo "Use one word only, no special characters."
 
 	until [[ "$CLIENT" =~ ^[a-zA-Z0-9_]+$ ]]; do
-		read -rp "Client name: " -e CLIENT
+		read -rp "Client name: " -e -iidc CLIENT
 	done
 
 	echo ""
@@ -1213,6 +1214,10 @@ initialCheck
 
 # Check if OpenVPN is already installed
 if [[ -e /etc/openvpn/server.conf ]]; then
+	if [[ auto == $1 ]] ; then 
+		MENU_OPTION=1
+		PASS=1
+	fi
 	manageMenu
 else
 	installOpenVPN

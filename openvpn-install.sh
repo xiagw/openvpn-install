@@ -333,7 +333,7 @@ function installQuestions() {
 	echo "See https://github.com/angristan/openvpn-install#security-and-encryption to learn more."
 	echo ""
 	until [[ $CUSTOMIZE_ENC =~ (y|n) ]]; do
-		read -rp "Customize encryption settings? [y/n]: " -e -i n CUSTOMIZE_ENC
+		read -rp "Customize encryption settings? [y/n]: " -e -in CUSTOMIZE_ENC
 	done
 	if [[ $CUSTOMIZE_ENC == "n" ]]; then
 		# Use default, sane and fast parameters
@@ -575,7 +575,14 @@ function installOpenVPN() {
 		PUBLIC_IPV4=$(curl ifconfig.co)
 		ENDPOINT=${ENDPOINT:-$PUBLIC_IPV4}
 	fi
-
+	## port=9411, client=idc01
+	if [[ $AUTO_INSTALL == "y" ]]; then
+		APPROVE_INSTALL=${APPROVE_INSTALL:-n}
+		PORT=9411
+		PORT_CHOICE=${PORT_CHOICE:-2}
+		CLIENT=${CLIENT:-idc01}
+		CUSTOMIZE_ENC=${CUSTOMIZE_ENC:-y}
+	fi
 	# Run setup questions first, and set other variales if auto-install
 	installQuestions
 
@@ -952,7 +959,7 @@ function newClient() {
 	echo "Use one word only, no special characters."
 
 	until [[ "$CLIENT" =~ ^[a-zA-Z0-9_]+$ ]]; do
-		read -rp "Client name: " CLIENT
+		read -rp "Client name: " -e CLIENT
 	done
 
 	echo ""
@@ -1211,10 +1218,10 @@ function manageMenu() {
 # Check for root, TUN, OS...
 initialCheck
 
-if [[ auto == "$1" ]] ; then 
+if [[ auto == "$1" ]]; then
 	MENU_OPTION=1
 	PASS=1
-	clientName=$(grep '^V' /etc/openvpn/easy-rsa/pki/index.txt |tail -n 1 |cut -d = -f 2)
+	clientName=$(grep '^V' /etc/openvpn/easy-rsa/pki/index.txt | tail -n 1 | cut -d = -f 2)
 	clientCount=${clientName#idc}
 	clientCount=$((clientCount + 1))
 	CLIENT="idc$clientCount"

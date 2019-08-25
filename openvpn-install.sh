@@ -322,7 +322,6 @@ function installQuestions() {
 					fi
 				done
 			fi
-		fi
 	done
 	echo ""
 	echo "Do you want to use compression? It is not recommended since the VORACLE attack make use of it."

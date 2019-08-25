@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Secure OpenVPN server installer for Debian, Ubuntu, CentOS, Fedora and Arch Linux
+# Secure OpenVPN server installer for Debian, Ubuntu, CentOS, Amazon Linux 2, Fedora and Arch Linux
 # https://github.com/angristan/openvpn-install
 
 function isRoot() {
@@ -21,8 +21,8 @@ function checkOS() {
 		# shellcheck disable=1091
 		source /etc/os-release
 
-		if [[ "$ID" == "debian" ]]; then
-			if [[ ! $VERSION_ID =~ (8|9) ]]; then
+		if [[ "$ID" == "debian" || "$ID" == "raspbian" ]]; then
+			if [[ ! $VERSION_ID =~ (8|9|10) ]]; then
 				echo "⚠️ Your version of Debian is not supported."
 				echo ""
 				echo "However, if you're using Debian >= 9 or unstable/testing then you can continue."
@@ -51,27 +51,34 @@ function checkOS() {
 				fi
 			fi
 		fi
-	elif [[ -e /etc/fedora-release ]]; then
-		OS=fedora
-	elif [[ -e /etc/centos-release ]]; then
-		if ! grep -qs "^CentOS Linux release 7" /etc/centos-release; then
-			echo "Your version of CentOS is not supported."
-			echo "The script only support CentOS 7."
-			echo ""
-			unset CONTINUE
-			until [[ $CONTINUE =~ (y|n) ]]; do
-				read -rp "Continue anyway? [y/n]: " -e CONTINUE
-			done
-			if [[ "$CONTINUE" == "n" ]]; then
-				echo "Ok, bye!"
+	elif [[ -e /etc/system-release ]]; then
+		source /etc/os-release
+		if [[ "$ID" = "centos" ]]; then
+			OS="centos"
+			if [[ ! $VERSION_ID == "7" ]]; then
+				echo "⚠️ Your version of CentOS is not supported."
+				echo ""
+				echo "The script only support CentOS 7."
+				echo ""
 				exit 1
 			fi
 		fi
-		OS=centos
+		if [[ "$ID" = "amzn" ]]; then
+			OS="amzn"
+			if [[ ! $VERSION_ID == "2" ]]; then
+				echo "⚠️ Your version of Amazon Linux is not supported."
+				echo ""
+				echo "The script only support Amazon Linux 2."
+				echo ""
+				exit 1
+			fi
+		fi
+	elif [[ -e /etc/fedora-release ]]; then
+		OS=fedora
 	elif [[ -e /etc/arch-release ]]; then
 		OS=arch
 	else
-		echo "Looks like you aren't running this installer on a Debian, Ubuntu, Fedora, CentOS or Arch Linux system"
+		echo "Looks like you aren't running this installer on a Debian, Ubuntu, Fedora, CentOS, Amazon Linux 2 or Arch Linux system"
 		exit 1
 	fi
 }
@@ -102,7 +109,7 @@ hide-version: yes
 use-caps-for-id: yes
 prefetch: yes' >>/etc/unbound/unbound.conf
 
-		elif [[ "$OS" == "centos" ]]; then
+		elif [[ "$OS" =~ (centos|amzn) ]]; then
 			yum install -y unbound
 
 			# Configuration
@@ -149,7 +156,7 @@ prefetch: yes' >>/etc/unbound/unbound.conf
 	prefetch: yes' >/etc/unbound/unbound.conf
 		fi
 
-		if [[ ! "$OS" =~ (fedora|centos) ]]; then
+		if [[ ! "$OS" =~ (fedora|centos|amzn) ]];then
 			# DNS Rebinding fix
 			echo "private-address: 10.0.0.0/8
 private-address: 172.16.0.0/12
@@ -285,43 +292,58 @@ function installQuestions() {
 	echo "   9) Google (Anycast: worldwide)"
 	echo "   10) Yandex Basic (Russia)"
 	echo "   11) AdGuard DNS (Russia)"
-	until [[ "$DNS" =~ ^[0-9]+$ ]] && [ "$DNS" -ge 1 ] && [ "$DNS" -le 11 ]; do
-		read -rp "DNS [1-10]: " -e -i 3 DNS
-		if [[ $DNS == 2 ]] && [[ -e /etc/unbound/unbound.conf ]]; then
-			echo ""
-			echo "Unbound is already installed."
-			echo "You can allow the script to configure it in order to use it from your OpenVPN clients"
-			echo "We will simply add a second server to /etc/unbound/unbound.conf for the OpenVPN subnet."
-			echo "No changes are made to the current configuration."
-			echo ""
+	echo "   12) Custom"
+	until [[ "$DNS" =~ ^[0-9]+$ ]] && [ "$DNS" -ge 1 ] && [ "$DNS" -le 12 ]; do
+		read -rp "DNS [1-12]: " -e -i 3 DNS
+			if [[ $DNS == 2 ]] && [[ -e /etc/unbound/unbound.conf ]]; then
+				echo ""
+				echo "Unbound is already installed."
+				echo "You can allow the script to configure it in order to use it from your OpenVPN clients"
+				echo "We will simply add a second server to /etc/unbound/unbound.conf for the OpenVPN subnet."
+				echo "No changes are made to the current configuration."
+				echo ""
 
-			until [[ $CONTINUE =~ (y|n) ]]; do
-				read -rp "Apply configuration changes to Unbound? [y/n]: " -e CONTINUE
-			done
-			if [[ $CONTINUE == "n" ]]; then
-				# Break the loop and cleanup
-				unset DNS
-				unset CONTINUE
+				until [[ $CONTINUE =~ (y|n) ]]; do
+					read -rp "Apply configuration changes to Unbound? [y/n]: " -e CONTINUE
+				done
+				if [[ $CONTINUE = "n" ]];then
+					# Break the loop and cleanup
+					unset DNS
+					unset CONTINUE
+				fi
+			elif [[ $DNS == "12" ]]; then
+				until [[ "$DNS1" =~ ^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$ ]]; do
+					read -rp "Primary DNS: " -e DNS1
+				done
+				until [[ "$DNS2" =~ ^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$ ]]; do
+					read -rp "Secondary DNS (optional): " -e DNS2
+					if [[ "$DNS2" == "" ]]; then
+						break
+					fi
+				done
 			fi
-		fi
 	done
 	echo ""
 	echo "Do you want to use compression? It is not recommended since the VORACLE attack make use of it."
 	until [[ $COMPRESSION_ENABLED =~ (y|n) ]]; do
 		read -rp"Enable compression? [y/n]: " -e -i n COMPRESSION_ENABLED
 	done
-	if [[ $COMPRESSION_ENABLED == "y" ]]; then
-		echo "Choose which compression algorithm you want to use:"
-		echo "   1) LZ4 (more efficient)"
-		echo "   2) LZ0"
-		until [[ $COMPRESSION_CHOICE =~ ^[1-2]$ ]]; do
-			read -rp"Compression algorithm [1-2]: " -e -i 1 COMPRESSION_CHOICE
+	if [[ $COMPRESSION_ENABLED == "y" ]];then
+		echo "Choose which compression algorithm you want to use: (they are ordered by efficiency)"
+		echo "   1) LZ4-v2"
+		echo "   2) LZ4"
+		echo "   3) LZ0"
+		until [[ $COMPRESSION_CHOICE =~ ^[1-3]$ ]]; do
+			read -rp"Compression algorithm [1-3]: " -e -i 1 COMPRESSION_CHOICE
 		done
 		case $COMPRESSION_CHOICE in
-		1)
+			1)
+			COMPRESSION_ALG="lz4-v2"
+			;;
+			2)
 			COMPRESSION_ALG="lz4"
 			;;
-		2)
+			3)
 			COMPRESSION_ALG="lzo"
 			;;
 		esac
@@ -608,7 +630,10 @@ function installOpenVPN() {
 	elif [[ "$OS" == 'centos' ]]; then
 		yum install -y epel-release
 		yum install -y openvpn iptables openssl wget ca-certificates curl
-	elif [[ "$OS" == 'fedora' ]]; then
+	elif [[ "$OS" = 'amzn' ]]; then
+		amazon-linux-extras install -y epel
+		yum install -y openvpn iptables openssl wget ca-certificates curl
+	elif [[ "$OS" = 'fedora' ]]; then
 		dnf install -y openvpn iptables openssl wget ca-certificates curl
 	elif [[ "$OS" == 'arch' ]]; then
 		# Install required dependencies and upgrade the system
@@ -649,7 +674,12 @@ function installOpenVPN() {
 	# Generate a random, alphanumeric identifier of 16 characters for CN and one for server name
 	SERVER_CN="cn_$(head /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 16 | head -n 1)"
 	SERVER_NAME="server_$(head /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 16 | head -n 1)"
-	echo "set_var EASYRSA_REQ_CN $SERVER_CN" >>vars
+	echo "set_var EASYRSA_REQ_CN $SERVER_CN" >> vars
+
+	# Workaround to remove unharmful error until easy-rsa 3.0.7
+	# https://github.com/OpenVPN/easy-rsa/issues/261
+	sed -i 's/^RANDFILE/#RANDFILE/g' pki/openssl-easyrsa.cnf
+
 	# Create the PKI, set up the CA, the DH params and the server certificate
 	./easyrsa init-pki
 	./easyrsa --batch build-ca nopass
@@ -754,6 +784,12 @@ ifconfig-pool-persist ipp.txt" >>/etc/openvpn/server.conf
 		echo 'push "dhcp-option DNS 176.103.130.130"' >>/etc/openvpn/server.conf
 		echo 'push "dhcp-option DNS 176.103.130.131"' >>/etc/openvpn/server.conf
 		;;
+		12) # Custom DNS
+		echo "push \"dhcp-option DNS $DNS1\"" >> /etc/openvpn/server.conf
+		if [[ "$DNS2" != "" ]]; then
+			echo "push \"dhcp-option DNS $DNS2\"" >> /etc/openvpn/server.conf
+		fi
+		;;
 	esac
 	echo 'push "redirect-gateway def1 bypass-dhcp"' >>/etc/openvpn/server.conf
 
@@ -789,7 +825,7 @@ push "redirect-gateway ipv6"' >>/etc/openvpn/server.conf
 	echo "crl-verify crl.pem
 ca ca.crt
 cert $SERVER_NAME.crt
-key $SERVER_NAME.key 
+key $SERVER_NAME.key
 auth $HMAC_ALG
 cipher $CIPHER
 ncp-ciphers $CIPHER
@@ -807,7 +843,7 @@ verb 3" >>/etc/openvpn/server.conf
 	if [[ "$IPV6_SUPPORT" == 'y' ]]; then
 		echo 'net.ipv6.conf.all.forwarding=1' >>/etc/sysctl.d/20-openvpn.conf
 	fi
-	# Avoid an unneeded reboot
+	# Apply sysctl rules
 	sysctl --system
 
 	# If SELinux is enabled and a custom port was selected, we need this
@@ -864,17 +900,17 @@ verb 3" >>/etc/openvpn/server.conf
 
 	# Script to add rules
 	echo "#!/bin/sh
-iptables -t nat -A POSTROUTING -s 10.8.0.0/24 -o $NIC -j MASQUERADE
-iptables -A INPUT -i tun0 -j ACCEPT
-iptables -A FORWARD -i $NIC -o tun0 -j ACCEPT
-iptables -A FORWARD -i tun0 -o $NIC -j ACCEPT
-iptables -A INPUT -i $NIC -p $PROTOCOL --dport $PORT -j ACCEPT" >/etc/iptables/add-openvpn-rules.sh
+iptables -t nat -I POSTROUTING 1 -s 10.8.0.0/24 -o $NIC -j MASQUERADE
+iptables -I INPUT 1 -i tun0 -j ACCEPT
+iptables -I FORWARD 1 -i $NIC -o tun0 -j ACCEPT
+iptables -I FORWARD 1 -i tun0 -o $NIC -j ACCEPT
+iptables -I INPUT 1 -i $NIC -p $PROTOCOL --dport $PORT -j ACCEPT" > /etc/iptables/add-openvpn-rules.sh
 
-	if [[ "$IPV6_SUPPORT" == 'y' ]]; then
-		echo "ip6tables -t nat -A POSTROUTING -s fd42:42:42:42::/112 -o $NIC -j MASQUERADE
-ip6tables -A INPUT -i tun0 -j ACCEPT
-ip6tables -A FORWARD -i $NIC -o tun0 -j ACCEPT
-ip6tables -A FORWARD -i tun0 -o $NIC -j ACCEPT" >>/etc/iptables/add-openvpn-rules.sh
+	if [[ "$IPV6_SUPPORT" = 'y' ]]; then
+		echo "ip6tables -t nat -I POSTROUTING 1 -s fd42:42:42:42::/112 -o $NIC -j MASQUERADE
+ip6tables -I INPUT 1 -i tun0 -j ACCEPT
+ip6tables -I FORWARD 1 -i $NIC -o tun0 -j ACCEPT
+ip6tables -I FORWARD 1 -i tun0 -o $NIC -j ACCEPT" >> /etc/iptables/add-openvpn-rules.sh
 	fi
 
 	# Script to remove rules
@@ -1092,7 +1128,7 @@ function removeUnbound() {
 			apt-get autoremove --purge -y unbound
 		elif [[ "$OS" == 'arch' ]]; then
 			pacman --noconfirm -R unbound
-		elif [[ "$OS" == 'centos' ]]; then
+		elif [[ "$OS" =~ (centos|amzn) ]]; then
 			yum remove -y unbound
 		elif [[ "$OS" == 'fedora' ]]; then
 			dnf remove -y unbound
@@ -1157,7 +1193,7 @@ function removeOpenVPN() {
 			fi
 		elif [[ "$OS" == 'arch' ]]; then
 			pacman --noconfirm -R openvpn
-		elif [[ "$OS" == 'centos' ]]; then
+		elif [[ "$OS" =~ (centos|amzn) ]]; then
 			yum remove -y openvpn
 		elif [[ "$OS" == 'fedora' ]]; then
 			dnf remove -y openvpn
